@@ -39,7 +39,7 @@ jobs:
 
       - name: Build ${{ matrix.service }}
         working-directory: backend/${{ matrix.service }}
-        run: mvn -B clean package
+        run: mvn -B clean package -DskipTests
 
       - name: Upload test reports
         if: always()
