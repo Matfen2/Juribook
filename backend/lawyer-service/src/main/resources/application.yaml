@@ -1,0 +1,53 @@
+server:
+  port: 8082
+  shutdown: graceful
+
+spring:
+  application:
+    name: lawyer-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:lawyer_db}
+    username: ${DB_USER:juribook}
+    password: ${DB_PASSWORD:juribook}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  # Sprint 0 : pas encore de migrations. Activer au Sprint 2 (tables lawyer, specialty, address).
+  flyway:
+    enabled: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: lawyer-service
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    com.juribook: DEBUG
