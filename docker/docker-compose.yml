@@ -1,0 +1,255 @@
+name: juribook
+
+x-postgres-common: &postgres-common
+  image: postgres:16-alpine
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: juribook
+    POSTGRES_PASSWORD: juribook
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U juribook"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+  networks:
+    - juribook
+
+x-service-common: &service-common
+  restart: unless-stopped
+  environment: &service-env
+    DB_HOST: ""              # overridden per service
+    DB_PORT: "5432"          # always 5432 inside the network
+    DB_USER: juribook
+    DB_PASSWORD: juribook
+    KAFKA_BOOTSTRAP: kafka:29092
+    SPRING_PROFILES_ACTIVE: docker
+  networks:
+    - juribook
+
+services:
+  # ─── Databases ────────────────────────────────────────────────────────────
+  auth-db:
+    <<: *postgres-common
+    container_name: juribook-auth-db
+    environment:
+      POSTGRES_USER: juribook
+      POSTGRES_PASSWORD: juribook
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+
+  lawyer-db:
+    <<: *postgres-common
+    container_name: juribook-lawyer-db
+    environment:
+      POSTGRES_USER: juribook
+      POSTGRES_PASSWORD: juribook
+      POSTGRES_DB: lawyer_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - lawyer-db-data:/var/lib/postgresql/data
+
+  booking-db:
+    <<: *postgres-common
+    container_name: juribook-booking-db
+    environment:
+      POSTGRES_USER: juribook
+      POSTGRES_PASSWORD: juribook
+      POSTGRES_DB: booking_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - booking-db-data:/var/lib/postgresql/data
+
+  notification-db:
+    <<: *postgres-common
+    container_name: juribook-notification-db
+    environment:
+      POSTGRES_USER: juribook
+      POSTGRES_PASSWORD: juribook
+      POSTGRES_DB: notification_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+
+  audit-db:
+    <<: *postgres-common
+    container_name: juribook-audit-db
+    environment:
+      POSTGRES_USER: juribook
+      POSTGRES_PASSWORD: juribook
+      POSTGRES_DB: audit_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - audit-db-data:/var/lib/postgresql/data
+
+  # ─── Kafka (Apache official image, KRaft mode) ───────────────────────────
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: juribook-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft (no Zookeeper)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Two listeners: INTERNAL for in-network services, EXTERNAL for host
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # Single-broker dev sanity
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Fixed cluster ID so topic data survives container recreation
+      CLUSTER_ID: 4L6g3nShTeMCtKxX86swQg
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - juribook
+
+  schema-registry:
+    image: apicurio/apicurio-registry:3.0.5
+    container_name: juribook-schema-registry
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8888:8080"
+    environment:
+      QUARKUS_PROFILE: prod
+      APICURIO_STORAGE_KIND: kafkasql
+      APICURIO_STORAGE_KAFKASQL_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - juribook
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: juribook-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: juribook-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8080/apis/ccompat/v7
+    networks:
+      - juribook
+
+  # ─── Backend services ─────────────────────────────────────────────────────
+  # Use `--profile services` to start these alongside infra:
+  #   docker compose --profile services up
+  # Without the profile, only infra starts (useful when running services from IDE).
+
+  auth-service:
+    <<: *service-common
+    container_name: juribook-auth-service
+    profiles: ["services", "full"]
+    build:
+      context: ../backend
+      dockerfile: auth-service/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      <<: *service-env
+      DB_HOST: auth-db
+      DB_NAME: auth_db
+    depends_on:
+      auth-db: { condition: service_healthy }
+      kafka:   { condition: service_healthy }
+
+  lawyer-service:
+    <<: *service-common
+    container_name: juribook-lawyer-service
+    profiles: ["services", "full"]
+    build:
+      context: ../backend
+      dockerfile: lawyer-service/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      <<: *service-env
+      DB_HOST: lawyer-db
+      DB_NAME: lawyer_db
+    depends_on:
+      lawyer-db: { condition: service_healthy }
+      kafka:     { condition: service_healthy }
+
+  booking-service:
+    <<: *service-common
+    container_name: juribook-booking-service
+    profiles: ["services", "full"]
+    build:
+      context: ../backend
+      dockerfile: booking-service/Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      <<: *service-env
+      DB_HOST: booking-db
+      DB_NAME: booking_db
+    depends_on:
+      booking-db: { condition: service_healthy }
+      kafka:      { condition: service_healthy }
+
+  notification-service:
+    <<: *service-common
+    container_name: juribook-notification-service
+    profiles: ["services", "full"]
+    build:
+      context: ../backend
+      dockerfile: notification-service/Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      <<: *service-env
+      DB_HOST: notification-db
+      DB_NAME: notification_db
+    depends_on:
+      notification-db: { condition: service_healthy }
+      kafka:           { condition: service_healthy }
+
+  audit-service:
+    <<: *service-common
+    container_name: juribook-audit-service
+    profiles: ["services", "full"]
+    build:
+      context: ../backend
+      dockerfile: audit-service/Dockerfile
+    ports:
+      - "8085:8085"
+    environment:
+      <<: *service-env
+      DB_HOST: audit-db
+      DB_NAME: audit_db
+    depends_on:
+      audit-db: { condition: service_healthy }
+      kafka:    { condition: service_healthy }
+
+volumes:
+  auth-db-data:
+  lawyer-db-data:
+  booking-db-data:
+  notification-db-data:
+  audit-db-data:
+
+networks:
+  juribook:
+    driver: bridge
