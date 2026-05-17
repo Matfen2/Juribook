@@ -66,3 +66,5 @@ juribook:
     expiration-ms: ${JWT_EXPIRATION:3600000}
     # Nom du cookie HttpOnly côté client
     cookie-name: ${JWT_COOKIE:juribook_access_token}
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}    # 7 jours
+    refresh-cookie-name: ${JWT_REFRESH_COOKIE:juribook_refresh_token}

@@ -1,5 +1,6 @@
 package juribook.auth_service.service;
 
+import jakarta.servlet.http.HttpServletRequest;
 import juribook.auth_service.dto.LoginRequest;
 import juribook.auth_service.dto.LoginResponse;
 import juribook.auth_service.dto.RegisterClientRequest;
@@ -20,8 +21,6 @@ import juribook.auth_service.repository.SpecialtyRepository;
 import juribook.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -38,28 +38,26 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final SpecialtyRepository specialtyRepository;
+    private final LawyerRepository lawyerRepository;
     private final PasswordEncoder passwordEncoder;
-    private final SpecialtyRepository specialtyRepository;  
-    private final LawyerRepository lawyerRepository; 
-    private final AuthenticationManager authenticationManager;   
-    private final JwtService jwtService; 
+    private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
+    // ─── Inscription client (1.2) ───────────────────────────────────────
     @Transactional
     public RegisterResponse registerClient(RegisterClientRequest request) {
-        // 1. Vérifier que l'email n'est pas déjà pris
         if (userRepository.existsByEmail(request.email())) {
             log.warn("Tentative d'inscription avec email existant: {}", request.email());
             throw new EmailAlreadyExistsException(request.email());
         }
 
-        // 2. Récupérer le rôle CLIENT depuis la DB
         Role clientRole = roleRepository.findByName(Role.RoleName.CLIENT)
             .orElseThrow(() -> new RoleNotFoundException(Role.RoleName.CLIENT));
 
-        // 3. Hasher le mot de passe (BCrypt)
         String passwordHash = passwordEncoder.encode(request.password());
 
-        // 4. Construire et persister l'utilisateur
         User user = User.builder()
             .email(request.email())
             .passwordHash(passwordHash)
@@ -73,7 +71,6 @@ public class AuthService {
         User saved = userRepository.save(user);
         log.info("Nouvel utilisateur CLIENT inscrit: id={}, email={}", saved.getId(), saved.getEmail());
 
-        // 5. Mapper vers DTO de réponse
         return new RegisterResponse(
             saved.getId(),
             saved.getEmail(),
@@ -83,9 +80,9 @@ public class AuthService {
         );
     }
 
+    // ─── Inscription avocat (1.3) ───────────────────────────────────────
     @Transactional
     public RegisterLawyerResponse registerLawyer(RegisterLawyerRequest request) {
-        // 1. Vérifier l'unicité de l'email et du numéro de barreau
         if (userRepository.existsByEmail(request.email())) {
             log.warn("Tentative d'inscription avocat avec email existant: {}", request.email());
             throw new EmailAlreadyExistsException(request.email());
@@ -95,30 +92,26 @@ public class AuthService {
             throw new BarNumberAlreadyExistsException(request.barNumber());
         }
 
-        // 2. Récupérer le rôle LAWYER et la spécialité
         Role lawyerRole = roleRepository.findByName(Role.RoleName.LAWYER)
             .orElseThrow(() -> new RoleNotFoundException(Role.RoleName.LAWYER));
         Specialty specialty = specialtyRepository.findByCode(request.specialtyCode())
             .orElseThrow(() -> new SpecialtyNotFoundException(request.specialtyCode()));
 
-        // 3. Hasher le mot de passe
         String passwordHash = passwordEncoder.encode(request.password());
 
-        // 4. Créer le User avec enabled=false (statut "en attente de validation")
         User user = User.builder()
             .email(request.email())
             .passwordHash(passwordHash)
             .firstName(request.firstName())
             .lastName(request.lastName())
             .phone(request.phone())
-            .enabled(false)              // ← critère "en attente de validation"
+            .enabled(false)  // "en attente de validation"
             .roles(Set.of(lawyerRole))
             .build();
         User savedUser = userRepository.save(user);
 
-        // 5. Créer le profil Lawyer associé
         Lawyer lawyer = Lawyer.builder()
-            .user(savedUser)             // @MapsId mappe userId depuis user.id
+            .user(savedUser)
             .barNumber(request.barNumber())
             .specialty(specialty)
             .city(request.city())
@@ -126,9 +119,8 @@ public class AuthService {
         Lawyer savedLawyer = lawyerRepository.save(lawyer);
 
         log.info("Nouvel avocat inscrit (en attente de validation): id={}, email={}, bar={}",
-                savedUser.getId(), savedUser.getEmail(), savedLawyer.getBarNumber());
+                 savedUser.getId(), savedUser.getEmail(), savedLawyer.getBarNumber());
 
-        // 6. Mapper vers DTO de réponse
         return new RegisterLawyerResponse(
             savedUser.getId(),
             savedUser.getEmail(),
@@ -142,20 +134,19 @@ public class AuthService {
         );
     }
 
-    public LoginResult login(LoginRequest request) {
-    // 1. Authentifier les credentials (Spring vérifie email + password + enabled)
-        Authentication authentication = authenticationManager.authenticate(
+    // ─── Login (1.4 + 1.7 : émet access + refresh) ──────────────────────
+    public LoginResult login(LoginRequest request, HttpServletRequest httpRequest) {
+        // Spring vérifie email + password + enabled (lance BadCredentials/Disabled si invalide)
+        authenticationManager.authenticate(
             new UsernamePasswordAuthenticationToken(request.email(), request.password())
         );
 
-        // 2. Charger l'entité User complète pour générer le token et la réponse
         User user = userRepository.findByEmail(request.email())
             .orElseThrow(() -> new IllegalStateException("User disparu après auth — incohérent"));
 
-        // 3. Générer le JWT
-        String token = jwtService.generateToken(user);
+        String accessToken = jwtService.generateToken(user);
+        String refreshToken = refreshTokenService.createForUser(user, httpRequest);
 
-        // 4. Construire la réponse (sans le token, il ira dans le cookie côté controller)
         List<String> roles = user.getRoles().stream()
             .map(r -> r.getName().name())
             .toList();
@@ -169,10 +160,37 @@ public class AuthService {
         );
 
         log.info("Login réussi pour: {} (rôles: {})", user.getEmail(), roles);
-
-        return new LoginResult(token, response);
+        return new LoginResult(accessToken, refreshToken, response);
     }
 
-/** Wrapper interne — le controller transformera ça en cookie + body. */
-    public record LoginResult(String token, LoginResponse response) {}
+    // ─── Refresh : rotation du refresh token (1.7) ──────────────────────
+    public LoginResult refresh(String refreshTokenRaw, HttpServletRequest httpRequest) {
+        RefreshTokenService.RotationResult rotation =
+            refreshTokenService.rotate(refreshTokenRaw, httpRequest);
+
+        User user = rotation.user();
+        String newAccessToken = jwtService.generateToken(user);
+
+        List<String> roles = user.getRoles().stream()
+            .map(r -> r.getName().name())
+            .toList();
+
+        LoginResponse response = new LoginResponse(
+            user.getId(),
+            user.getEmail(),
+            user.getFirstName(),
+            user.getLastName(),
+            roles
+        );
+
+        return new LoginResult(newAccessToken, rotation.newRawToken(), response);
+    }
+
+    // ─── Logout : révoque tous les refresh tokens du user (1.7) ────────
+    public void logout(UUID userId) {
+        refreshTokenService.revokeAllForUser(userId);
+    }
+
+    // ─── Wrapper interne login/refresh ─────────────────────────────────
+    public record LoginResult(String accessToken, String refreshToken, LoginResponse response) {}
 }

@@ -1,6 +1,7 @@
 package juribook.auth_service.controller;
 
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import juribook.auth_service.config.JwtProperties;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -56,20 +58,47 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
             @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
 
-        AuthService.LoginResult result = authService.login(request);
-
-        // Pose le cookie HttpOnly avec le JWT
-        Cookie jwtCookie = new Cookie(jwtProperties.cookieName(), result.token());
-        jwtCookie.setHttpOnly(true);
-        jwtCookie.setSecure(false);   // ← passer à true en HTTPS (Sprint 8)
-        jwtCookie.setPath("/");
-        jwtCookie.setMaxAge((int) (jwtProperties.expirationMs() / 1000));
-        jwtCookie.setAttribute("SameSite", "Strict");
-        httpResponse.addCookie(jwtCookie);
-
+        AuthService.LoginResult result = authService.login(request, httpRequest);
+        setAuthCookies(httpResponse, result.accessToken(), result.refreshToken());
         return ResponseEntity.ok(result.response());
+    }
+
+    // ─── Refresh : rotation du refresh token (1.7) ──────────────────────
+    @PostMapping("/refresh")
+    public ResponseEntity<LoginResponse> refresh(
+            @CookieValue(name = "${juribook.jwt.refresh-cookie-name}", required = false) String refreshToken,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            AuthService.LoginResult result = authService.refresh(refreshToken, httpRequest);
+            setAuthCookies(httpResponse, result.accessToken(), result.refreshToken());
+            return ResponseEntity.ok(result.response());
+        } catch (IllegalStateException e) {
+            clearAuthCookies(httpResponse);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
+    // ─── Logout : révoque les refresh tokens + clear cookies (1.7) ─────
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(
+            Authentication authentication,
+            HttpServletResponse httpResponse) {
+
+        if (authentication != null) {
+            userRepository.findByEmail(authentication.getName())
+                .ifPresent(user -> authService.logout(user.getId()));
+        }
+        clearAuthCookies(httpResponse);
+        return ResponseEntity.noContent().build();
     }
 
     // ─── /me — Profil de l'utilisateur authentifié (tout rôle confondu) ─
@@ -114,5 +143,41 @@ public class AuthController {
     @GetMapping("/me/lawyer-or-admin")
     public ResponseEntity<String> lawyerOrAdmin(Authentication authentication) {
         return ResponseEntity.ok("Zone réservée modération: " + authentication.getName());
+    }
+
+    // ─── Helpers privés (gestion des cookies access + refresh) ──────────
+
+    private void setAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
+        // Cookie access token (1h)
+        Cookie accessCookie = new Cookie(jwtProperties.cookieName(), accessToken);
+        accessCookie.setHttpOnly(true);
+        accessCookie.setSecure(false);   // ← true en HTTPS (Sprint 8)
+        accessCookie.setPath("/");
+        accessCookie.setMaxAge((int) (jwtProperties.expirationMs() / 1000));
+        accessCookie.setAttribute("SameSite", "Strict");
+        response.addCookie(accessCookie);
+
+        // Cookie refresh token (7j) — Path restreint à /api/auth pour limiter l'exposition
+        Cookie refreshCookie = new Cookie(jwtProperties.refreshCookieName(), refreshToken);
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setSecure(false);
+        refreshCookie.setPath("/");
+        refreshCookie.setMaxAge((int) (jwtProperties.refreshExpirationMs() / 1000));
+        refreshCookie.setAttribute("SameSite", "Strict");
+        response.addCookie(refreshCookie);
+    }
+
+    private void clearAuthCookies(HttpServletResponse response) {
+        Cookie access = new Cookie(jwtProperties.cookieName(), "");
+        access.setHttpOnly(true);
+        access.setPath("/");
+        access.setMaxAge(0);
+        response.addCookie(access);
+
+        Cookie refresh = new Cookie(jwtProperties.refreshCookieName(), "");
+        refresh.setHttpOnly(true);
+        refresh.setPath("/");
+        refresh.setMaxAge(0);
+        response.addCookie(refresh);
     }
 }
