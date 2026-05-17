@@ -7,6 +7,8 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -87,6 +89,26 @@ public class GlobalExceptionHandler {
             "status",    401,
             "error",     "Unauthorized",
             "message",   "Compte en attente de validation par un administrateur"
+        ));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    403,
+            "error",     "Forbidden",
+            "message",   "Vous n'avez pas les permissions nécessaires pour accéder à cette ressource"
+        ));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthenticationFailure(AuthenticationException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    401,
+            "error",     "Unauthorized",
+            "message",   "Authentification requise"
         ));
     }
 }
