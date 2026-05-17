@@ -1,11 +1,34 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from '../context/AuthContext';
+import { Header } from '../components/Header';
+import { ProtectedRoute } from '../components/ProtectedRoute';
+import { Home } from '../pages/Home';
+import { Login } from '../pages/Login';
+import { RegisterClient } from '../pages/RegisterClient';
+import { RegisterLawyer } from '../pages/RegisterLawyer';
+import { Dashboard } from '../pages/Dashboard';
+
 function App() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold tracking-tight">JuriBook</h1>
-        <p className="mt-3 text-slate-400">Sprint 0 — frontend opérationnel</p>
-      </div>
-    </div>
+    <BrowserRouter>
+      <AuthProvider>
+        <Header />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<RegisterClient />} />
+          <Route path="/register/lawyer" element={<RegisterLawyer />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 
