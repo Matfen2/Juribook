@@ -56,3 +56,13 @@ logging:
   level:
     root: INFO
     com.juribook: DEBUG
+
+juribook:
+  jwt:
+    # Clé HMAC-SHA256 — minimum 32 caractères (256 bits)
+    # En production, à externaliser via une variable d'environnement
+    secret: ${JWT_SECRET:dev-only-secret-key-replace-in-prod-2026-juribook-sprint1}
+    # Durée de validité du token en millisecondes (1h = 3600000)
+    expiration-ms: ${JWT_EXPIRATION:3600000}
+    # Nom du cookie HttpOnly côté client
+    cookie-name: ${JWT_COOKIE:juribook_access_token}

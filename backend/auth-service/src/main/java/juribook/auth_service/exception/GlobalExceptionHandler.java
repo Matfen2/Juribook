@@ -2,6 +2,8 @@ package juribook.auth_service.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -65,6 +67,26 @@ public class GlobalExceptionHandler {
             "status",    409,
             "error",     "Conflict",
             "message",   ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    401,
+            "error",     "Unauthorized",
+            "message",   "Email ou mot de passe incorrect"
+        ));
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<Map<String, Object>> handleDisabled(DisabledException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    401,
+            "error",     "Unauthorized",
+            "message",   "Compte en attente de validation par un administrateur"
         ));
     }
 }

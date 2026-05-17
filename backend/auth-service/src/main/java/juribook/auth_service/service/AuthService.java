@@ -1,5 +1,7 @@
 package juribook.auth_service.service;
 
+import juribook.auth_service.dto.LoginRequest;
+import juribook.auth_service.dto.LoginResponse;
 import juribook.auth_service.dto.RegisterClientRequest;
 import juribook.auth_service.dto.RegisterLawyerRequest;
 import juribook.auth_service.dto.RegisterLawyerResponse;
@@ -18,10 +20,15 @@ import juribook.auth_service.repository.SpecialtyRepository;
 import juribook.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -34,6 +41,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final SpecialtyRepository specialtyRepository;  
     private final LawyerRepository lawyerRepository; 
+    private final AuthenticationManager authenticationManager;   
+    private final JwtService jwtService; 
 
     @Transactional
     public RegisterResponse registerClient(RegisterClientRequest request) {
@@ -132,4 +141,38 @@ public class AuthService {
             savedUser.getCreatedAt()
         );
     }
+
+    public LoginResult login(LoginRequest request) {
+    // 1. Authentifier les credentials (Spring vérifie email + password + enabled)
+        Authentication authentication = authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(request.email(), request.password())
+        );
+
+        // 2. Charger l'entité User complète pour générer le token et la réponse
+        User user = userRepository.findByEmail(request.email())
+            .orElseThrow(() -> new IllegalStateException("User disparu après auth — incohérent"));
+
+        // 3. Générer le JWT
+        String token = jwtService.generateToken(user);
+
+        // 4. Construire la réponse (sans le token, il ira dans le cookie côté controller)
+        List<String> roles = user.getRoles().stream()
+            .map(r -> r.getName().name())
+            .toList();
+
+        LoginResponse response = new LoginResponse(
+            user.getId(),
+            user.getEmail(),
+            user.getFirstName(),
+            user.getLastName(),
+            roles
+        );
+
+        log.info("Login réussi pour: {} (rôles: {})", user.getEmail(), roles);
+
+        return new LoginResult(token, response);
+    }
+
+/** Wrapper interne — le controller transformera ça en cookie + body. */
+    public record LoginResult(String token, LoginResponse response) {}
 }
