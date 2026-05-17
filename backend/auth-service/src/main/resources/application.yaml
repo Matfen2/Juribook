@@ -22,7 +22,7 @@ spring:
 
   # Sprint 0 : pas encore de migrations. Activer au Sprint 5 (table append-only audit_log).
   flyway:
-    enabled: false
+    enabled: true
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
