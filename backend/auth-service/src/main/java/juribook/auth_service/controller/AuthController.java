@@ -2,6 +2,8 @@ package juribook.auth_service.controller;
 
 import jakarta.validation.Valid;
 import juribook.auth_service.dto.RegisterClientRequest;
+import juribook.auth_service.dto.RegisterLawyerRequest;
+import juribook.auth_service.dto.RegisterLawyerResponse;
 import juribook.auth_service.dto.RegisterResponse;
 import juribook.auth_service.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,13 @@ public class AuthController {
     public ResponseEntity<RegisterResponse> registerClient(
             @Valid @RequestBody RegisterClientRequest request) {
         RegisterResponse response = authService.registerClient(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/register/lawyer")
+    public ResponseEntity<RegisterLawyerResponse> registerLawyer(
+            @Valid @RequestBody RegisterLawyerRequest request) {
+        RegisterLawyerResponse response = authService.registerLawyer(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

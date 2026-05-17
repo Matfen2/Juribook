@@ -47,4 +47,24 @@ public class GlobalExceptionHandler {
             "fields",    errors
         ));
     }
+
+    @ExceptionHandler(SpecialtyNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSpecialtyNotFound(SpecialtyNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    400,
+            "error",     "Bad Request",
+            "message",   ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(BarNumberAlreadyExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleBarNumberExists(BarNumberAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+            "timestamp", OffsetDateTime.now(),
+            "status",    409,
+            "error",     "Conflict",
+            "message",   ex.getMessage()
+        ));
+    }
 }
