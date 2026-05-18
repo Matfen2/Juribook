@@ -7,6 +7,7 @@ import juribook.auth_service.dto.RegisterClientRequest;
 import juribook.auth_service.dto.RegisterLawyerRequest;
 import juribook.auth_service.dto.RegisterLawyerResponse;
 import juribook.auth_service.dto.RegisterResponse;
+import juribook.auth_service.events.AvroSerializer;
 import juribook.auth_service.exception.BarNumberAlreadyExistsException;
 import juribook.auth_service.exception.EmailAlreadyExistsException;
 import juribook.auth_service.exception.RoleNotFoundException;
@@ -15,10 +16,14 @@ import juribook.auth_service.model.entity.Lawyer;
 import juribook.auth_service.model.entity.Role;
 import juribook.auth_service.model.entity.Specialty;
 import juribook.auth_service.model.entity.User;
+import juribook.auth_service.outbox.OutboxEvent;
+import juribook.auth_service.outbox.OutboxRepository;
 import juribook.auth_service.repository.LawyerRepository;
 import juribook.auth_service.repository.RoleRepository;
 import juribook.auth_service.repository.SpecialtyRepository;
 import juribook.auth_service.repository.UserRepository;
+import juribook.events.lawyer.LawyerRegisteredPayload;
+import juribook.events.lawyer.LawyerRegisteredV1;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,6 +32,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -44,6 +50,8 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final OutboxRepository outboxRepository;
+    private final AvroSerializer avroSerializer;
 
     // ─── Inscription client (1.2) ───────────────────────────────────────
     @Transactional
@@ -80,7 +88,7 @@ public class AuthService {
         );
     }
 
-    // ─── Inscription avocat (1.3) ───────────────────────────────────────
+    // ─── Inscription avocat (1.3 + 2.2.B outbox) ────────────────────────
     @Transactional
     public RegisterLawyerResponse registerLawyer(RegisterLawyerRequest request) {
         if (userRepository.existsByEmail(request.email())) {
@@ -117,6 +125,11 @@ public class AuthService {
             .city(request.city())
             .build();
         Lawyer savedLawyer = lawyerRepository.save(lawyer);
+
+        // ─── Outbox event (Sprint 2.2.B) ──────────────────────────────
+        // Écrit dans la même transaction JPA que User + Lawyer.
+        // Soit les 3 commitent ensemble, soit tout rollback : pas de dual-write.
+        publishLawyerRegisteredEvent(savedUser, savedLawyer);
 
         log.info("Nouvel avocat inscrit (en attente de validation): id={}, email={}, bar={}",
                  savedUser.getId(), savedUser.getEmail(), savedLawyer.getBarNumber());
@@ -189,6 +202,38 @@ public class AuthService {
     // ─── Logout : révoque tous les refresh tokens du user (1.7) ────────
     public void logout(UUID userId) {
         refreshTokenService.revokeAllForUser(userId);
+    }
+
+    // ─── Publication de l'event lawyer.registered via outbox (2.2.B) ────
+    private void publishLawyerRegisteredEvent(User user, Lawyer lawyer) {
+        LawyerRegisteredPayload payload = LawyerRegisteredPayload.newBuilder()
+            .setUserId(user.getId())
+            .setEmail(user.getEmail())
+            .setFirstName(user.getFirstName())
+            .setLastName(user.getLastName())
+            .setPhone(user.getPhone())  // peut être null, accepté par l'union Avro
+            .setBarNumber(lawyer.getBarNumber())
+            .setSpecialtyCode(lawyer.getSpecialty().getCode())
+            .setCity(lawyer.getCity())
+            .build();
+
+        LawyerRegisteredV1 event = LawyerRegisteredV1.newBuilder()
+            .setEventId(UUID.randomUUID())
+            .setEventType("lawyer.registered")
+            .setSchemaVersion(1)
+            .setOccurredAt(Instant.now())
+            .setAggregateId(user.getId())
+            .setPayload(payload)
+            .build();
+
+        OutboxEvent outboxEvent = OutboxEvent.builder()
+            .aggregateType("LAWYER")
+            .aggregateId(user.getId())
+            .eventType("lawyer.registered")
+            .payload(avroSerializer.toBytes(event))
+            .build();
+
+        outboxRepository.save(outboxEvent);
     }
 
     // ─── Wrapper interne login/refresh ─────────────────────────────────
