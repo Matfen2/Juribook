@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
 import { FormField } from '../components/FormField';
-import type { ApiError } from '../types/auth';
+import type { ApiError } from '../../types/auth';
 import { AxiosError } from 'axios';
 
 export function Login() {
