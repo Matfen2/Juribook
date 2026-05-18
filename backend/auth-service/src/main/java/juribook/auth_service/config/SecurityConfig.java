@@ -1,5 +1,6 @@
 package juribook.auth_service.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.time.OffsetDateTime;
 
 @Configuration
 @RequiredArgsConstructor
@@ -31,6 +34,7 @@ public class SecurityConfig {
     public DaoAuthenticationProvider authenticationProvider(PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
+        provider.setHideUserNotFoundExceptions(false);
         return provider;
     }
 
@@ -44,6 +48,34 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+            // ─── Gestion des erreurs d'authentification / d'autorisation ───
+            // (Sprint 1.8) Force la sémantique HTTP correcte :
+            //   - 401 Unauthorized : pas de credentials (pas de cookie JWT)
+            //   - 403 Forbidden    : credentials valides mais permissions insuffisantes
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write(
+                        "{\"timestamp\":\"" + OffsetDateTime.now() + "\"," +
+                        "\"status\":401," +
+                        "\"error\":\"Unauthorized\"," +
+                        "\"message\":\"Authentification requise\"}"
+                    );
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json");
+                    response.getWriter().write(
+                        "{\"timestamp\":\"" + OffsetDateTime.now() + "\"," +
+                        "\"status\":403," +
+                        "\"error\":\"Forbidden\"," +
+                        "\"message\":\"Permissions insuffisantes pour accéder à cette ressource\"}"
+                    );
+                })
+            )
+
             .authorizeHttpRequests(auth -> auth
                 // ─── Routes publiques (inscription, login, refresh) ─────────
                 .requestMatchers(
