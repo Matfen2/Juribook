@@ -1,0 +1,49 @@
+{
+  "type": "record",
+  "name": "LawyerRegisteredV1",
+  "namespace": "juribook.events.lawyer",
+  "doc": "Published by auth-service when a lawyer completes registration. Consumed by lawyer-service to create the local Lawyer projection.",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "Unique event identifier, used for consumer idempotency."
+    },
+    {
+      "name": "eventType",
+      "type": "string",
+      "doc": "Logical event name, e.g. 'lawyer.registered'. Allows routing on a multi-event topic."
+    },
+    {
+      "name": "schemaVersion",
+      "type": "int",
+      "default": 1
+    },
+    {
+      "name": "occurredAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" }
+    },
+    {
+      "name": "aggregateId",
+      "type": { "type": "string", "logicalType": "uuid" },
+      "doc": "Identifies the lawyer this event concerns. Used as Kafka partition key."
+    },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "LawyerRegisteredPayload",
+        "fields": [
+          { "name": "userId",        "type": { "type": "string", "logicalType": "uuid" } },
+          { "name": "email",         "type": "string" },
+          { "name": "firstName",     "type": "string" },
+          { "name": "lastName",      "type": "string" },
+          { "name": "phone",         "type": ["null", "string"], "default": null },
+          { "name": "barNumber",     "type": "string" },
+          { "name": "specialtyCode", "type": "string" },
+          { "name": "city",          "type": "string" }
+        ]
+      }
+    }
+  ]
+}
