@@ -25,7 +25,6 @@ spring:
         jdbc:
           time_zone: UTC
 
-  # Sprint 0 : pas encore de migrations. Activer au Sprint 5 (table append-only audit_log).
   flyway:
     enabled: true
 
@@ -36,6 +35,19 @@ spring:
       auto-offset-reset: earliest
     producer:
       acks: all
+      properties:
+        # Sérialiseur clé : StringSerializer pour les UUID stringifiés
+        key.serializer: org.apache.kafka.common.serialization.StringSerializer
+        # Sérialiseur valeur : Apicurio Avro (préfixe magic byte + globalId)
+        value.serializer: io.apicurio.registry.serde.avro.AvroKafkaSerializer
+        # URL Apicurio v3 — différente de v2 (/api/v2)
+        apicurio.registry.url: ${APICURIO_URL:http://localhost:8888/apis/registry/v3}
+        # Enregistre automatiquement le schéma à la première publication (dev only)
+        apicurio.registry.auto-register: "true"
+        # Récupère le schéma le plus récent avant chaque publication
+        apicurio.registry.find-latest: "true"
+        # Convention de nommage : artifactId = nom du topic
+        apicurio.registry.artifact-resolver-strategy: io.apicurio.registry.serde.strategy.TopicIdStrategy
 
 springdoc:
   swagger-ui:
@@ -55,7 +67,7 @@ management:
 logging:
   level:
     root: INFO
-    com.juribook: DEBUG
+    juribook.auth_service: DEBUG
 
 juribook:
   jwt:
@@ -68,3 +80,9 @@ juribook:
     cookie-name: ${JWT_COOKIE:juribook_access_token}
     refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}    # 7 jours
     refresh-cookie-name: ${JWT_REFRESH_COOKIE:juribook_refresh_token}
+
+  # Configuration du poller outbox (Sprint 2.2.B-bis)
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 100
+    max-retries: 15

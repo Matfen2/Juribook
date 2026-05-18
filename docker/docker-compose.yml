@@ -134,7 +134,17 @@ services:
     environment:
       QUARKUS_PROFILE: prod
       APICURIO_STORAGE_KIND: kafkasql
-      APICURIO_STORAGE_KAFKASQL_BOOTSTRAP_SERVERS: kafka:29092
+      # Apicurio v3 renamed this env var: removed the "STORAGE_" segment.
+      # In v2 it was APICURIO_STORAGE_KAFKASQL_BOOTSTRAP_SERVERS — that name is
+      # silently ignored in v3, causing Apicurio to fall back to localhost:9092
+      # and infinite-loop on startup. Discovered Sprint 2.2.B-bis.
+      APICURIO_KAFKASQL_BOOTSTRAP_SERVERS: kafka:29092
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/apis/registry/v3/system/info || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     networks:
       - juribook
 

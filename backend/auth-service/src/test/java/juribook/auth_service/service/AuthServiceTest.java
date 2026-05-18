@@ -6,11 +6,14 @@ import juribook.auth_service.dto.RegisterClientRequest;
 import juribook.auth_service.dto.RegisterLawyerRequest;
 import juribook.auth_service.dto.RegisterLawyerResponse;
 import juribook.auth_service.dto.RegisterResponse;
+import juribook.auth_service.events.AvroSerializer;
 import juribook.auth_service.exception.EmailAlreadyExistsException;
 import juribook.auth_service.model.entity.Lawyer;
 import juribook.auth_service.model.entity.Role;
 import juribook.auth_service.model.entity.Specialty;
 import juribook.auth_service.model.entity.User;
+import juribook.auth_service.outbox.OutboxEvent;
+import juribook.auth_service.outbox.OutboxRepository;
 import juribook.auth_service.repository.LawyerRepository;
 import juribook.auth_service.repository.RoleRepository;
 import juribook.auth_service.repository.SpecialtyRepository;
@@ -52,6 +55,8 @@ class AuthServiceTest {
     @Mock private JwtService jwtService;
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private HttpServletRequest httpRequest;
+    @Mock private OutboxRepository outboxRepository;
+    @Mock private AvroSerializer avroSerializer;
 
     @InjectMocks
     private AuthService authService;
@@ -134,9 +139,9 @@ class AuthServiceTest {
         verify(userRepository, never()).save(any(User.class));
     }
 
-    // ─── Test 3: inscription avocat → enabled=false ────────────────────
+    // ─── Test 3: inscription avocat → enabled=false + event outbox ─────
     @Test
-    @DisplayName("registerLawyer — crée un user LAWYER en attente de validation (enabled=false)")
+    @DisplayName("registerLawyer — crée un user LAWYER en attente de validation (enabled=false) et publie l'event outbox")
     void registerLawyer_pendingValidation() {
         // Given
         RegisterLawyerRequest request = new RegisterLawyerRequest(
@@ -157,6 +162,7 @@ class AuthServiceTest {
             return u;
         });
         when(lawyerRepository.save(any(Lawyer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(avroSerializer.toBytes(any())).thenReturn(new byte[]{1, 2, 3});
 
         // When
         RegisterLawyerResponse response = authService.registerLawyer(request);
@@ -168,6 +174,9 @@ class AuthServiceTest {
 
         // Vérifie que le user a été créé avec enabled=false
         verify(userRepository).save(any(User.class));
+        // Vérifie qu'un event lawyer.registered a été ajouté à l'outbox
+        verify(avroSerializer).toBytes(any());
+        verify(outboxRepository).save(any(OutboxEvent.class));
     }
 
     // ─── Test 4: login retourne JWT + refresh token ────────────────────
