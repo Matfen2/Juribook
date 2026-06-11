@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: lawyer-service
+
+# Port serveur
+server:
+  port: 8082

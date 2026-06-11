@@ -1,2 +1,9 @@
-<!-- notification-service -->
-Notification-service : Consomme les événements Kafka, envoie email/rappels
+# notification-service
+
+Consomme les événements Kafka et envoie emails / rappels / notifications in-app.
+
+| | |
+|---|---|
+| **Port** | `8084` |
+| **Base** | PostgreSQL - `juribook_notification` |
+| **Stack** | Java 21 · Spring Boot 4 · Apache Kafka · Spring Mail · Thymeleaf · Flyway |

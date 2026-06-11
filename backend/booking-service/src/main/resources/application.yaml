@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: booking-service
+
+# Port serveur
+server:
+  port: 8083

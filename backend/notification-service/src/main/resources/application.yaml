@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: notification-service
+
+# Port serveur
+server:
+  port: 8084
