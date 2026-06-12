@@ -1,7 +1,46 @@
 spring:
   application:
+    # Nom logique du micro-service (logs, Actuator, Kafka client-id, etc.)
     name: booking-service
 
-# Port serveur
+  # ═══════════════════════════════════════════════════════════
+  #  Connexion à la base PostgreSQL dédiée à ce micro-service
+  #  (pattern "database per service")
+  # ═══════════════════════════════════════════════════════════
+  datasource:
+    # localhost car ce service tourne hors Docker (depuis l'IDE/Maven).
+    # En conteneur Docker, surchargé par SPRING_DATASOURCE_URL
+    # (cf. docker-compose.yml -> jdbc:postgresql://postgres:5432/bookingdb)
+    url: jdbc:postgresql://localhost:5432/bookingdb
+    username: juribook
+    password: juribook
+    driver-class-name: org.postgresql.Driver
+
+  # ═══════════════════════════════════════════════════════════
+  #  JPA / Hibernate
+  # ═══════════════════════════════════════════════════════════
+  jpa:
+    hibernate:
+      # "validate" : Hibernate vérifie le schéma existant sans le modifier
+      # (c'est Flyway qui gère les migrations).
+      ddl-auto: validate
+    # Passe à "true" temporairement pour déboguer les requêtes SQL générées
+    show-sql: false
+
+  # ═══════════════════════════════════════════════════════════
+  #  Flyway - gestion des migrations de schéma SQL (ajout des fichiers .sql plus tard)
+  # ═══════════════════════════════════════════════════════════
+  flyway:
+    enabled: true
+
+  # ═══════════════════════════════════════════════════════════
+  #  Kafka - gestion d'événements
+  # ═══════════════════════════════════════════════════════════
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# ═══════════════════════════════════════════════════════════
+#  Configuration du serveur web embarqué
+# ═══════════════════════════════════════════════════════════
 server:
   port: 8083

@@ -16,7 +16,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro # Initialisation de la base de données
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U juribook"]
       interval: 10s
@@ -54,6 +54,9 @@ services:
       timeout: 10s
       retries: 5
 
+  # ═══════════════════════════════════════════════════════════
+  #  Kafka UI - interface web pour inspecter topics & messages
+  # ═══════════════════════════════════════════════════════════
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
