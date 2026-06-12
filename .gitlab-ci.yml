@@ -1,0 +1,191 @@
+# ═══════════════════════════════════════════════════════════
+#  JuriBook - Pipeline CI GitLab
+#  Stack : Java 21 / Spring Boot 4 / Maven / PostgreSQL / Kafka
+# ═══════════════════════════════════════════════════════════
+stages:
+  - build
+  - test
+  - docker-build
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  MAVEN_CLI_OPTS: "-B -DskipTests"
+
+# ═══════════════════════════════════════════════════════════
+#  Cache Maven partagé entre les jobs
+# ═══════════════════════════════════════════════════════════
+.maven_cache: &maven_cache
+  cache:
+    key: maven-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .m2/repository
+
+# ═══════════════════════════════════════════════════════════
+#  Template réutilisable : build Maven pour un microservice
+# ═══════════════════════════════════════════════════════════
+.build_template: &build_template
+  image: maven:3.9-eclipse-temurin-21
+  stage: build
+  <<: *maven_cache
+  script:
+    - cd backend/$SERVICE_NAME
+    - mvn $MAVEN_CLI_OPTS clean package
+  artifacts:
+    paths:
+      - backend/$SERVICE_NAME/target/*.jar
+    expire_in: 1 hour
+
+# ═══════════════════════════════════════════════════════════
+#  Template réutilisable : tests unitaires + intégration
+#  (Postgres et Kafka en services Docker pour les tests)
+# ═══════════════════════════════════════════════════════════
+.test_template: &test_template
+  image: maven:3.9-eclipse-temurin-21
+  stage: test
+  <<: *maven_cache
+  services:
+    - name: postgres:15-alpine
+      alias: postgres
+    - name: confluentinc/cp-kafka:7.6.1
+      alias: kafka
+  variables:
+    POSTGRES_USER: juribook
+    POSTGRES_PASSWORD: juribook
+    POSTGRES_DB: juribook
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/juribook
+    SPRING_DATASOURCE_USERNAME: juribook
+    SPRING_DATASOURCE_PASSWORD: juribook
+    SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  script:
+    - cd backend/$SERVICE_NAME
+    - mvn -B test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - backend/$SERVICE_NAME/target/surefire-reports/TEST-*.xml
+
+# ═══════════════════════════════════════════════════════════
+#  Template réutilisable : build et push image Docker
+#  (utilise le Docker-in-Docker de GitLab)
+# ═══════════════════════════════════════════════════════════
+.docker_build_template: &docker_build_template
+  stage: docker-build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - cd backend/$SERVICE_NAME
+    - docker build -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE/$SERVICE_NAME:latest .
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE/$SERVICE_NAME:latest
+  only:
+    - main
+
+# ═══════════════════════════════════════════════════════════
+#  BUILD - un job par microservice
+# ═══════════════════════════════════════════════════════════
+build:auth-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: auth-service
+
+build:lawyer-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: lawyer-service
+
+build:booking-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: booking-service
+
+build:notification-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: notification-service
+
+build:audit-service:
+  <<: *build_template
+  variables:
+    SERVICE_NAME: audit-service
+
+# ═══════════════════════════════════════════════════════════
+#  TEST - un job par microservice
+# ═══════════════════════════════════════════════════════════
+test:auth-service:
+  <<: *test_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs:
+    - build:auth-service
+
+test:lawyer-service:
+  <<: *test_template
+  variables:
+    SERVICE_NAME: lawyer-service
+  needs:
+    - build:lawyer-service
+
+test:booking-service:
+  <<: *test_template
+  variables:
+    SERVICE_NAME: booking-service
+  needs:
+    - build:booking-service
+
+test:notification-service:
+  <<: *test_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs:
+    - build:notification-service
+
+test:audit-service:
+  <<: *test_template
+  variables:
+    SERVICE_NAME: audit-service
+  needs:
+    - build:audit-service
+
+# ═══════════════════════════════════════════════════════════
+#  DOCKER BUILD - un job par microservice (uniquement sur main)
+# ═══════════════════════════════════════════════════════════
+docker:auth-service:
+  <<: *docker_build_template
+  variables:
+    SERVICE_NAME: auth-service
+  needs:
+    - test:auth-service
+
+docker:lawyer-service:
+  <<: *docker_build_template
+  variables:
+    SERVICE_NAME: lawyer-service
+  needs:
+    - test:lawyer-service
+
+docker:booking-service:
+  <<: *docker_build_template
+  variables:
+    SERVICE_NAME: booking-service
+  needs:
+    - test:booking-service
+
+docker:notification-service:
+  <<: *docker_build_template
+  variables:
+    SERVICE_NAME: notification-service
+  needs:
+    - test:notification-service
+
+docker:audit-service:
+  <<: *docker_build_template
+  variables:
+    SERVICE_NAME: audit-service
+  needs:
+    - test:audit-service
