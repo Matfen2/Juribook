@@ -13,6 +13,7 @@ Authentification et gestion des comptes de JuriBook.
 | Méthode | Route                          | Accès        | Description                            |
 |---------|--------------------------------|--------------|----------------------------------------|
 | `POST`  | `/api/auth/register`           | public       | Inscription client                     |
+| `POST`  | `/api/auth/register/lawyer`    | public       | Inscription avocat                     |
 | `GET`   | `/api/auth/1`                  | public       | Récupération d'un utilisateur          |
 | `GET`   | `/api/auth`                    | public       | Récupération de tous les utilisateurs  |
 

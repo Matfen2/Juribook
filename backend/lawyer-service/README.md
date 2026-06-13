@@ -9,6 +9,11 @@ Profils publics des avocats, recherche et photos de JuriBook.
 | **Stockage** | MinIO (S3-compatible) - photos de profil |
 | **Stack** | Java 21 · Spring Boot 4 · Spring Security · JWT (JJWT 0.13) · Spring Data JPA · Flyway · MinIO · Docker |
 
+## Migration Flyway/Tableaux SQL
+| Version | Contenu                                              |
+|---------|------------------------------------------------------|
+| `V1`    | Table `lwayers`                                        |
+
 ## Lancer en local
 
 ```bash

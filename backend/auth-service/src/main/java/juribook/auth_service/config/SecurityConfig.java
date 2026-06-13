@@ -10,6 +10,16 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+/**
+ * Configuration Spring Security de auth-service.
+ *
+ * Sans cette classe, Spring Security applique sa configuration par défaut
+ * (formulaire de login + mot de passe généré aléatoirement), ce qui
+ * bloquerait Swagger UI et tous les endpoints en 403/login.
+ *
+ * SessionCreationPolicy.STATELESS : pas de session HTTP côté serveur,
+ * cohérent avec une authentification future par JWT (1.4/1.5).
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -17,23 +27,24 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Désactive CSRF : inutile pour une API REST stateless (pas de formulaires HTML)
+            // CSRF inutile pour une API REST stateless
             .csrf(csrf -> csrf.disable())
 
-            // Pas de session HTTP : chaque requête est authentifiée indépendamment (JWT plus tard)
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
             .authorizeHttpRequests(auth -> auth
-                // Inscription et connexion accessibles sans authentification
-                // (un utilisateur non connecté doit pouvoir créer un compte / se logger)
+                // Inscription (client et avocat) et connexion : accessibles
+                // sans authentification, un utilisateur non connecté doit
+                // pouvoir créer un compte ou se logger.
                 .requestMatchers(
                     "/api/auth/register",
+                    "/api/auth/register/lawyer",
                     "/api/auth/login"
                 ).permitAll()
 
-                // TEMPORAIRE - à retirer une fois le JWT en place :
-                // consultation des comptes accessible sans authentification pour les tests
+                // TEMPORAIRE - consultation publique avant mise en place
+                // du JWT (1.4/1.5). À restreindre côté ADMIN ensuite.
                 .requestMatchers(HttpMethod.GET, "/api/auth/**").permitAll()
 
                 // Swagger / OpenAPI accessibles sans authentification (dev)
@@ -47,14 +58,12 @@ public class SecurityConfig {
                 // Actuator (health check) accessible sans authentification
                 .requestMatchers("/actuator/**").permitAll()
 
-                // Toutes les autres routes nécessitent une authentification (JWT)
+                // Toutes les autres routes nécessiteront un JWT valide
                 .anyRequest().authenticated()
             )
 
-            // Désactive le formulaire de login par défaut (on utilisera JWT plus tard)
+            // Pas de formulaire de login par défaut : remplacé par JWT
             .formLogin(form -> form.disable())
-
-            // Désactive l'authentification HTTP Basic
             .httpBasic(basic -> basic.disable());
 
         return http.build();
