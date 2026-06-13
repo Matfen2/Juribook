@@ -2,9 +2,12 @@ package juribook.auth_service.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -22,6 +25,17 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
             .authorizeHttpRequests(auth -> auth
+                // Inscription et connexion accessibles sans authentification
+                // (un utilisateur non connecté doit pouvoir créer un compte / se logger)
+                .requestMatchers(
+                    "/api/auth/register",
+                    "/api/auth/login"
+                ).permitAll()
+
+                // TEMPORAIRE - à retirer une fois le JWT en place :
+                // consultation des comptes accessible sans authentification pour les tests
+                .requestMatchers(HttpMethod.GET, "/api/auth/**").permitAll()
+
                 // Swagger / OpenAPI accessibles sans authentification (dev)
                 .requestMatchers(
                     "/swagger-ui/**",
@@ -33,7 +47,7 @@ public class SecurityConfig {
                 // Actuator (health check) accessible sans authentification
                 .requestMatchers("/actuator/**").permitAll()
 
-                // Toutes les autres routes nécessitent une authentification
+                // Toutes les autres routes nécessitent une authentification (JWT)
                 .anyRequest().authenticated()
             )
 
@@ -44,5 +58,14 @@ public class SecurityConfig {
             .httpBasic(basic -> basic.disable());
 
         return http.build();
+    }
+
+    /**
+     * Encodeur de mot de passe BCrypt, utilisé par AuthService
+     * pour hacher les mots de passe avant stockage en base.
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
