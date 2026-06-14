@@ -5,6 +5,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * DTO d'entrée pour l'inscription standard (POST /api/auth/register).
+ *
+ * Pas de champ "role" : l'utilisateur ne choisit jamais son rôle.
+ * AuthService.create() assigne automatiquement Role.CLIENT.
+ * Permettre au client d'envoyer "role": "ADMIN" serait une faille
+ * d'élévation de privilèges à l'inscription.
+ */
 @Data
 public class CreateUserRequest {
 
@@ -21,7 +29,4 @@ public class CreateUserRequest {
     private String name;
 
     private String phoneNumber;
-
-    @NotBlank(message = "Le rôle est obligatoire")
-    private String role;
 }

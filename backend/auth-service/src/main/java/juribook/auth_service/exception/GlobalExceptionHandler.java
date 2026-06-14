@@ -22,14 +22,16 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    // ─── Avocat non trouvé (Sprint 1.2 - LawyerNotFoundException) ──
-  
-    // ─── Connexion impossible (Sprint 1.3 - ConnectionImpossibleException) ──
-    
     // ─── Inscription impossible : email déjà utilisé (EmailAlreadyExistsException.java) ──────────
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<Map<String, Object>> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    // ─── Identifiants invalides (login) ────────────────────────
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
     // ─── Erreurs de validation (@Valid sur les DTOs) ───────────

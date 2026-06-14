@@ -75,7 +75,7 @@ services:
   # Microservices Spring Boot (auth, lawyer, booking, notification, audit) :
   # - Chaque service a sa propre base PostgreSQL (créée par init.sql)
   auth-service:
-      build: ../backend/auth-service
+      build: ./backend/auth-service
       container_name: juribook-auth-service
       depends_on:
         postgres:
@@ -91,7 +91,7 @@ services:
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
   lawyer-service:
-      build: ../backend/lawyer-service
+      build: ./backend/lawyer-service
       container_name: juribook-lawyer-service
       depends_on:
         postgres:
@@ -107,7 +107,7 @@ services:
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
   booking-service:
-      build: ../backend/booking-service
+      build: ./backend/booking-service
       container_name: juribook-booking-service
       depends_on:
         postgres:
@@ -123,7 +123,7 @@ services:
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
   notification-service:
-      build: ../backend/notification-service
+      build: ./backend/notification-service
       container_name: juribook-notification-service
       depends_on:
         postgres:
@@ -139,7 +139,7 @@ services:
         SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
   
   audit-service:
-      build: ../backend/audit-service
+      build: ./backend/audit-service
       container_name: juribook-audit-service
       depends_on:
         postgres:

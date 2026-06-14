@@ -6,6 +6,9 @@ import juribook.auth_service.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+/**
+ * Mapper MapStruct : convertit CreateUserRequest <-> User <-> UserResponse.
+ */
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
@@ -13,10 +16,12 @@ public interface UserMapper {
     UserResponse toResponse(User entity);
 
     // Requête -> Entité
-    // - "password" est ignoré ici : il sera haché (BCrypt) dans le service avant d'être assigné
-    // - "role" est converti depuis la String du DTO vers l'enum Role
+    // - "password" est ignoré ici : haché (BCrypt) dans AuthService avant assignation
+    // - "id" est ignoré : généré par la base de données
+    // - "role" est ignoré : CreateUserRequest n'a pas ce champ,
+    //   AuthService.create() assigne Role.CLIENT après le mapping
     @Mapping(target = "password", ignore = true)
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "role", expression = "java(Role.valueOf(request.getRole().toUpperCase()))")
+    @Mapping(target = "role", ignore = true)
     User toEntity(CreateUserRequest request);
 }

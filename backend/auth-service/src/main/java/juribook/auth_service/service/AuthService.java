@@ -1,12 +1,17 @@
 package juribook.auth_service.service;
 
 import juribook.auth_service.dto.request.CreateUserRequest;
+import juribook.auth_service.dto.request.LoginRequest;
+import juribook.auth_service.dto.response.LoginResponse;
 import juribook.auth_service.dto.response.UserResponse;
+import juribook.auth_service.entity.Role;
 import juribook.auth_service.entity.User;
 import juribook.auth_service.exception.EmailAlreadyExistsException;
+import juribook.auth_service.exception.InvalidCredentialsException;
 import juribook.auth_service.exception.UserNotFoundException;
 import juribook.auth_service.mapper.UserMapper;
 import juribook.auth_service.repository.UserRepository;
+import juribook.auth_service.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,6 +29,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -40,10 +46,11 @@ public class AuthService {
 
         User user = userMapper.toEntity(request);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.CLIENT); // rôle assigné côté serveur, jamais par le client
 
         User saved = userRepository.save(user);
 
-        log.info("Utilisateur créé avec succès : id={}", saved.getId());
+        log.info("Utilisateur créé avec succès : id={}, role={}", saved.getId(), saved.getRole());
         return userMapper.toResponse(saved);
     }
 
@@ -70,5 +77,41 @@ public class AuthService {
         return users.stream()
                 .map(userMapper::toResponse)
                 .toList();
+    }
+
+    /**
+     * Authentifie un utilisateur et génère un token JWT.
+     *
+     * POST /api/auth/login
+     *
+     * Étapes :
+     * 1. Recherche l'utilisateur par email.
+     * 2. Vérifie le mot de passe avec passwordEncoder.matches() (compare
+     *    le mot de passe en clair reçu avec le hash BCrypt stocké).
+     * 3. En cas d'échec (email inconnu OU mot de passe incorrect), lève
+     *    la MÊME exception avec le MÊME message dans les deux cas, pour
+     *    ne pas indiquer à un attaquant si l'email existe.
+     * 4. Génère le token JWT (subject=email, claims userId+role).
+     * 5. Renvoie le token + ses métadonnées + le profil utilisateur.
+     */
+    public LoginResponse login(LoginRequest request) {
+        log.info("Tentative de connexion : {}", request.getEmail());
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new InvalidCredentialsException("Email ou mot de passe incorrect"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException("Email ou mot de passe incorrect");
+        }
+
+        String token = jwtService.generateToken(user);
+        log.info("Connexion réussie : id={}, role={}", user.getId(), user.getRole());
+
+        return LoginResponse.builder()
+                .token(token)
+                .tokenType("Bearer")
+                .expiresIn(jwtService.getExpirationSeconds())
+                .user(userMapper.toResponse(user))
+                .build();
     }
 }

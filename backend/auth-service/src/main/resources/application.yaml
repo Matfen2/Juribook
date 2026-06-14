@@ -45,3 +45,15 @@ spring:
 # ═══════════════════════════════════════════════════════════
 server:
   port: 8081
+
+# ═══════════════════════════════════════════════════════════
+#  Configuration JWT (Sprint 1.4)
+# ═══════════════════════════════════════════════════════════
+jwt:
+  # Clé secrète utilisée pour signer/vérifier les tokens (algorithme HS256).
+  # Doit faire au moins 256 bits (32 caractères) - ici 64 caractères en dev.
+  # ⚠️ EN PRODUCTION : ne jamais committer cette valeur, la fournir via
+  # une variable d'environnement (JWT_SECRET).
+  secret: slWvvAZ8bFyeq6yIylxyPbtWcWEYFlsJbMhLTzKEuovOMgLEPXXnIzWW5ZsqX/yiK9t5QxhYKTCUW3lmZqJUWA==
+  # Durée de validité du token, en millisecondes (ici : 1 heure)
+  expiration: 3600000

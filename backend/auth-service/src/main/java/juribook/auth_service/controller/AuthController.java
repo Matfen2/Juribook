@@ -2,6 +2,8 @@ package juribook.auth_service.controller;
 
 import jakarta.validation.Valid;
 import juribook.auth_service.dto.request.CreateUserRequest;
+import juribook.auth_service.dto.request.LoginRequest;
+import juribook.auth_service.dto.response.LoginResponse;
 import juribook.auth_service.dto.response.UserResponse;
 import juribook.auth_service.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,13 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(@Valid @RequestBody CreateUserRequest request) {
         return authService.create(request);
+    }
+
+    // Authentification : vérifie email/mot de passe et renvoie un token JWT
+    // POST /api/auth/login
+    @PostMapping("/login")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
     }
 
     // Obtenir un utilisateur spécifique
